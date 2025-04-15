@@ -1,35 +1,54 @@
+import pygame
 import tkinter as tk
 from tkinter import filedialog
-import pygame
 
-# Inicializar pygame mixer
+# Iniciar Pygame
+pygame.init()
 pygame.mixer.init()
 
 # Ventana principal
 root = tk.Tk()
 root.title("Mini Sampler")
+root.geometry("400x300")
 
-# Lista para guardar los sonidos cargados
-samples = [None] * 4  # 4 pads
+# Variables
+NUM_SAMPLES = 4
+sounds = [None] * NUM_SAMPLES
+labels = ["Empty"] * NUM_SAMPLES
+buttons = []
+keys = ['z', 'x', 'c', 'v']
 
-def cargar_sample(idx):
-    filepath = filedialog.askopenfilename(filetypes=[("WAV files", "*.wav")])
+def load_sound(index):
+    filepath = filedialog.askopenfilename(filetypes=[("Audio files", "*.wav *.ogg *.mp3")])
     if filepath:
-        samples[idx] = pygame.mixer.Sound(filepath)
+        sounds[index] = pygame.mixer.Sound(filepath)
+        labels[index] = filepath.split("/")[-1]  # Solo el nombre del archivo
+        buttons[index]["text"] = f"{keys[index].upper()}: {labels[index]}"
 
-def reproducir_sample(idx):
-    if samples[idx]:
-        samples[idx].play()
+def play_sound(index):
+    if sounds[index]:
+        sounds[index].play()
 
-# Crear 4 botones de carga y reproducción
-for i in range(4):
-    frame = tk.Frame(root)
-    frame.pack(pady=5)
+# Crear botones
+for i in range(NUM_SAMPLES):
+    btn = tk.Button(root, text=f"{keys[i].upper()}: {labels[i]}", width=30, height=2,
+                    command=lambda i=i: play_sound(i))
+    btn.grid(row=i, column=0, padx=10, pady=5)
+    buttons.append(btn)
 
-    cargar_btn = tk.Button(frame, text=f"Cargar Sample {i+1}", command=lambda i=i: cargar_sample(i))
-    cargar_btn.pack(side="left", padx=5)
+# Botones para cargar sonidos
+for i in range(NUM_SAMPLES):
+    load_btn = tk.Button(root, text="Cargar", command=lambda i=i: load_sound(i))
+    load_btn.grid(row=i, column=1, padx=5)
 
-    play_btn = tk.Button(frame, text=f"Play {i+1}", command=lambda i=i: reproducir_sample(i))
-    play_btn.pack(side="right", padx=5)
+# Manejo de teclado
+def on_key(event):
+    key = event.char.lower()
+    if key in keys:
+        index = keys.index(key)
+        play_sound(index)
 
+root.bind("<Key>", on_key)
+
+# Iniciar loop de la interfaz
 root.mainloop()
