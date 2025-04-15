@@ -3,6 +3,8 @@ import pygame
 import threading
 import time
 import os
+from tkinter import filedialog
+
 
 # Configuración
 NUM_SAMPLES = 4
@@ -12,6 +14,7 @@ STEP_TIME = 60 / BPM / 4  # tiempo por paso (a semicorcheas)
 
 sample_paths = ["kick.wav", "clap.wav", "hh.wav", "sample4.wav"]
 samples = [None] * NUM_SAMPLES
+sample_labels = [None] * NUM_SAMPLES
 step_states = [[None for _ in range(NUM_STEPS)] for _ in range(NUM_SAMPLES)]
 current_step = 0
 running = False
@@ -29,12 +32,29 @@ root = tk.Tk()
 root.title("PO KO Step Sequencer")
 
 # Crear botones (checkboxes)
+def load_sample(index):
+    file_path = filedialog.askopenfilename(filetypes=[("WAV files", "*.wav")])
+    if file_path:
+        samples[index] = pygame.mixer.Sound(file_path)
+        sample_labels[index].config(text=os.path.basename(file_path))
+
 for row in range(NUM_SAMPLES):
+    # Botón para cargar sample
+    btn = tk.Button(root, text="Cargar", command=lambda i=row: load_sample(i))
+    btn.grid(row=row, column=0)
+
+    # Etiqueta con el nombre del archivo
+    label = tk.Label(root, text=os.path.basename(sample_paths[row]) if samples[row] else "Ninguno")
+    label.grid(row=row, column=1)
+    sample_labels[row] = label
+
+    # Checkboxes del secuenciador
     for col in range(NUM_STEPS):
         var = tk.IntVar()
         step_states[row][col] = var
         cb = tk.Checkbutton(root, variable=var)
-        cb.grid(row=row, column=col)
+        cb.grid(row=row, column=col + 2)
+
 
 # Indicación visual de paso actual
 step_labels = [tk.Label(root, text=" ") for _ in range(NUM_STEPS)]
