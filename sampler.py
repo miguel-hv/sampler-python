@@ -12,6 +12,7 @@ NUM_STEPS = 16
 BPM = 125
 STEP_TIME = 60 / BPM / 4  # tiempo por paso (a semicorcheas)
 
+key_bindings = ['z', 'x', 'c', 'v']
 sample_paths = ["kick.wav", "clap.wav", "hh.wav", "sample4.wav"]
 samples = [None] * NUM_SAMPLES
 sample_labels = [None] * NUM_SAMPLES
@@ -31,29 +32,38 @@ for i, path in enumerate(sample_paths):
 root = tk.Tk()
 root.title("PO KO Step Sequencer")
 
+volume_vars = [tk.DoubleVar(value=1.0) for _ in range(NUM_SAMPLES)]
+
 # Crear botones (checkboxes)
 def load_sample(index):
     file_path = filedialog.askopenfilename(filetypes=[("WAV files", "*.wav")])
     if file_path:
         samples[index] = pygame.mixer.Sound(file_path)
+        samples[index].set_volume(volume_vars[index].get())
         sample_labels[index].config(text=os.path.basename(file_path))
 
 for row in range(NUM_SAMPLES):
-    # Botón para cargar sample
+    # Botón cargar sample
     btn = tk.Button(root, text="Cargar", command=lambda i=row: load_sample(i))
     btn.grid(row=row, column=0)
 
-    # Etiqueta con el nombre del archivo
+    # Nombre del sample
     label = tk.Label(root, text=os.path.basename(sample_paths[row]) if samples[row] else "Ninguno")
     label.grid(row=row, column=1)
     sample_labels[row] = label
 
-    # Checkboxes del secuenciador
+    # Slider de volumen
+    vol = tk.Scale(root, from_=0.0, to=1.0, resolution=0.01, orient="horizontal",
+                   variable=volume_vars[row],
+                   command=lambda val, i=row: samples[i].set_volume(float(val)) if samples[i] else None)
+    vol.grid(row=row, column=2)
+
+    # Checkboxes
     for col in range(NUM_STEPS):
         var = tk.IntVar()
         step_states[row][col] = var
         cb = tk.Checkbutton(root, variable=var)
-        cb.grid(row=row, column=col + 2)
+        cb.grid(row=row, column=col + 3)
 
 
 # Indicación visual de paso actual
@@ -98,4 +108,15 @@ def toggle_play():
 play_button = tk.Button(root, text="Play", command=toggle_play)
 play_button.grid(row=NUM_SAMPLES + 1, column=0, columnspan=4, sticky="w")
 
+def on_key_press(event):
+    key = event.char.lower()
+    if key in key_bindings:
+        index = key_bindings.index(key)
+        if samples[index]:
+            samples[index].play()
+
+root.bind("<KeyPress>", on_key_press)
+
 root.mainloop()
+
+
