@@ -1,54 +1,81 @@
-import pygame
 import tkinter as tk
-from tkinter import filedialog
+import pygame
+import threading
+import time
+import os
 
-# Iniciar Pygame
-pygame.init()
-pygame.mixer.init()
-
-# Ventana principal
-root = tk.Tk()
-root.title("Mini Sampler")
-root.geometry("400x300")
-
-# Variables
+# Configuración
 NUM_SAMPLES = 4
-sounds = [None] * NUM_SAMPLES
-labels = ["Empty"] * NUM_SAMPLES
-buttons = []
-keys = ['z', 'x', 'c', 'v']
+NUM_STEPS = 16
+BPM = 125
+STEP_TIME = 60 / BPM / 4  # tiempo por paso (a semicorcheas)
 
-def load_sound(index):
-    filepath = filedialog.askopenfilename(filetypes=[("Audio files", "*.wav *.ogg *.mp3")])
-    if filepath:
-        sounds[index] = pygame.mixer.Sound(filepath)
-        labels[index] = filepath.split("/")[-1]  # Solo el nombre del archivo
-        buttons[index]["text"] = f"{keys[index].upper()}: {labels[index]}"
+sample_paths = ["kick.wav", "clap.wav", "hh.wav", "sample4.wav"]
+samples = [None] * NUM_SAMPLES
+step_states = [[None for _ in range(NUM_STEPS)] for _ in range(NUM_SAMPLES)]
+current_step = 0
+running = False
 
-def play_sound(index):
-    if sounds[index]:
-        sounds[index].play()
+# Cargar sonidos
+pygame.mixer.init()
+for i, path in enumerate(sample_paths):
+    if os.path.exists(path):
+        samples[i] = pygame.mixer.Sound(path)
+    else:
+        print(f"Archivo no encontrado: {path}")
 
-# Crear botones
-for i in range(NUM_SAMPLES):
-    btn = tk.Button(root, text=f"{keys[i].upper()}: {labels[i]}", width=30, height=2,
-                    command=lambda i=i: play_sound(i))
-    btn.grid(row=i, column=0, padx=10, pady=5)
-    buttons.append(btn)
+# GUI
+root = tk.Tk()
+root.title("PO KO Step Sequencer")
 
-# Botones para cargar sonidos
-for i in range(NUM_SAMPLES):
-    load_btn = tk.Button(root, text="Cargar", command=lambda i=i: load_sound(i))
-    load_btn.grid(row=i, column=1, padx=5)
+# Crear botones (checkboxes)
+for row in range(NUM_SAMPLES):
+    for col in range(NUM_STEPS):
+        var = tk.IntVar()
+        step_states[row][col] = var
+        cb = tk.Checkbutton(root, variable=var)
+        cb.grid(row=row, column=col)
 
-# Manejo de teclado
-def on_key(event):
-    key = event.char.lower()
-    if key in keys:
-        index = keys.index(key)
-        play_sound(index)
+# Indicación visual de paso actual
+step_labels = [tk.Label(root, text=" ") for _ in range(NUM_STEPS)]
+for col, label in enumerate(step_labels):
+    label.grid(row=NUM_SAMPLES, column=col)
 
-root.bind("<Key>", on_key)
+# Loop del secuenciador (en un hilo)
+def sequencer_loop():
+    global current_step
+    next_time = time.perf_counter()
+    while running:
+        # Toca los sonidos activos
+        for sample_index in range(NUM_SAMPLES):
+            if step_states[sample_index][current_step].get() == 1:
+                if samples[sample_index]:
+                    samples[sample_index].play()
 
-# Iniciar loop de la interfaz
+        # Indicar visualmente el paso
+        for i, label in enumerate(step_labels):
+            label.config(text=">" if i == current_step else " ")
+
+        # Espera al próximo paso
+        next_time += STEP_TIME
+        sleep_time = max(0, next_time - time.perf_counter())
+        time.sleep(sleep_time)
+
+        current_step = (current_step + 1) % NUM_STEPS
+
+# Botón Start/Stop
+def toggle_play():
+    global running, current_step
+    if not running:
+        running = True
+        current_step = 0
+        threading.Thread(target=sequencer_loop, daemon=True).start()
+        play_button.config(text="Stop")
+    else:
+        running = False
+        play_button.config(text="Play")
+
+play_button = tk.Button(root, text="Play", command=toggle_play)
+play_button.grid(row=NUM_SAMPLES + 1, column=0, columnspan=4, sticky="w")
+
 root.mainloop()
