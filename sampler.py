@@ -6,16 +6,20 @@ import os
 from tkinter import filedialog
 
 # Configuración
+NUM_PADS = 16
 NUM_SAMPLES = 4
 NUM_STEPS = 16
 BPM = 125
-STEP_TIME = 60 / BPM / 4  # tiempo por paso (a semicorcheas)
+STEP_TIME = 60 / BPM / 4
 key_bindings = ['z', 'x', 'c', 'v']
 sample_paths = ["kick.wav", "clap.wav", "hh.wav", "sample4.wav"]
 
 # Estado
-samples = [None] * NUM_SAMPLES
-sample_labels = [None] * NUM_SAMPLES
+samples = [None] * NUM_PADS
+sample_labels = [None] * NUM_PADS
+selected_sample_index = 0
+current_step = 0
+running = False
 
 # Init sonido
 pygame.mixer.init()
@@ -29,16 +33,11 @@ for i, path in enumerate(sample_paths):
 root = tk.Tk()
 root.title("PO KO Style Step Sequencer")
 
-# Estado (2)
-step_states = [[tk.IntVar() for _ in range(NUM_STEPS)] for _ in range(NUM_SAMPLES)]
-volume_vars = [tk.DoubleVar(value=1.0) for _ in range(NUM_SAMPLES)]
-
-selected_sample_index = 0
+step_states = [[tk.IntVar() for _ in range(NUM_STEPS)] for _ in range(NUM_PADS)]
+volume_vars = [tk.DoubleVar(value=1.0) for _ in range(NUM_PADS)]
 write_mode = tk.BooleanVar(value=False)
-current_step = 0
-running = False
 
-# === Botón Write ===
+# Botón Write
 def toggle_write():
     if write_mode.get():
         write_mode.set(False)
@@ -50,14 +49,28 @@ def toggle_write():
 write_button = tk.Button(root, text="Write", command=toggle_write)
 write_button.grid(row=0, column=0, sticky="w")
 
-# === Rejilla dinámica (pads o secuenciador) ===
+# Frame para la rejilla
 pad_grid = tk.Frame(root)
 pad_grid.grid(row=1, column=0, columnspan=8, rowspan=4, padx=10, pady=10)
 
+# Vista pads
 def select_sample(index):
     global selected_sample_index
-    selected_sample_index = index
-    render_pad_view()
+    if samples[index]:
+        selected_sample_index = index
+        samples[index].play()
+        update_pad_styles()
+
+def update_pad_styles():
+    for i in range(4):
+        for j in range(4):
+            index = i * 4 + j
+            btn = pad_grid.grid_slaves(row=i, column=j)
+            if btn:
+                if index == selected_sample_index:
+                    btn[0].config(bg="#ff9999")
+                else:
+                    btn[0].config(bg="SystemButtonFace")
 
 def render_pad_view():
     for widget in pad_grid.winfo_children():
@@ -66,15 +79,18 @@ def render_pad_view():
     for i in range(4):
         for j in range(4):
             index = i * 4 + j
-            if index >= NUM_SAMPLES:
-                continue
-            text = f"{index + 1}"
+            sample = samples[index]
+            label = os.path.basename(sample_paths[index])[:6] if sample else "(vacío)"
             bg = "#ff9999" if index == selected_sample_index else "SystemButtonFace"
-            btn = tk.Button(pad_grid, text=text, width=6, height=3,
-                            bg=bg,
-                            command=lambda idx=index: select_sample(idx))
+            state = "normal" if sample else "disabled"
+            btn = tk.Button(
+                pad_grid, text=label, width=8, height=3, bg=bg,
+                state=state,
+                command=lambda idx=index: select_sample(idx)
+            )
             btn.grid(row=i, column=j, padx=2, pady=2)
 
+# Vista secuenciador
 def render_sequencer_view():
     for widget in pad_grid.winfo_children():
         widget.destroy()
@@ -83,18 +99,19 @@ def render_sequencer_view():
         for j in range(4):
             step = i * 4 + j
             var = step_states[selected_sample_index][step]
-            cb = tk.Checkbutton(pad_grid, variable=var)
-            cb.grid(row=i, column=j, padx=6, pady=6)
+            cb = tk.Checkbutton(pad_grid, variable=var, width=8, height=3)
+            cb.grid(row=i, column=j, padx=2, pady=2)
 
-# === Cargar sample ===
+# Cargar sample
 def load_sample(index):
     file_path = filedialog.askopenfilename(filetypes=[("WAV files", "*.wav")])
     if file_path:
         samples[index] = pygame.mixer.Sound(file_path)
         samples[index].set_volume(volume_vars[index].get())
         sample_labels[index].config(text=os.path.basename(file_path))
+        render_pad_view()  # Actualiza etiqueta del pad
 
-# === UI para cargar samples y volumen ===
+# UI de carga y volumen
 for row in range(NUM_SAMPLES):
     btn = tk.Button(root, text="Cargar", command=lambda i=row: load_sample(i))
     btn.grid(row=row + 5, column=0)
@@ -108,17 +125,16 @@ for row in range(NUM_SAMPLES):
                    command=lambda val, i=row: samples[i].set_volume(float(val)) if samples[i] else None)
     vol.grid(row=row + 5, column=2)
 
-# === Secuenciador ===
+# Secuenciador loop
 def sequencer_loop():
     global current_step
     next_time = time.perf_counter()
     while running:
-        for sample_index in range(NUM_SAMPLES):
+        for sample_index in range(NUM_PADS):
             if step_states[sample_index][current_step].get() == 1:
                 if samples[sample_index]:
                     samples[sample_index].play()
 
-        # Highlight del paso actual en modo write
         if write_mode.get():
             for i in range(4):
                 for j in range(4):
@@ -131,7 +147,7 @@ def sequencer_loop():
         time.sleep(max(0, next_time - time.perf_counter()))
         current_step = (current_step + 1) % NUM_STEPS
 
-# === Play/Stop ===
+# Botón play
 def toggle_play():
     global running, current_step
     if not running:
@@ -146,7 +162,7 @@ def toggle_play():
 play_button = tk.Button(root, text="Play", command=toggle_play)
 play_button.grid(row=9, column=0, columnspan=4, sticky="w")
 
-# === Teclado ===
+# Teclado
 def on_key_press(event):
     key = event.char.lower()
     if key in key_bindings:
@@ -156,7 +172,7 @@ def on_key_press(event):
 
 root.bind("<KeyPress>", on_key_press)
 
-# Inicializar con vista de pads
+# Iniciar con la vista de pads
 render_pad_view()
 
 root.mainloop()
