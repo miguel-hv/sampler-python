@@ -5,22 +5,19 @@ import time
 import os
 from tkinter import filedialog
 
-
 # Configuración
 NUM_SAMPLES = 4
 NUM_STEPS = 16
 BPM = 125
 STEP_TIME = 60 / BPM / 4  # tiempo por paso (a semicorcheas)
-
 key_bindings = ['z', 'x', 'c', 'v']
 sample_paths = ["kick.wav", "clap.wav", "hh.wav", "sample4.wav"]
+
+# Estado
 samples = [None] * NUM_SAMPLES
 sample_labels = [None] * NUM_SAMPLES
-step_states = [[None for _ in range(NUM_STEPS)] for _ in range(NUM_SAMPLES)]
-current_step = 0
-running = False
 
-# Cargar sonidos
+# Init sonido
 pygame.mixer.init()
 for i, path in enumerate(sample_paths):
     if os.path.exists(path):
@@ -28,13 +25,68 @@ for i, path in enumerate(sample_paths):
     else:
         print(f"Archivo no encontrado: {path}")
 
-# GUI
+# Init GUI
 root = tk.Tk()
-root.title("PO KO Step Sequencer")
+root.title("PO KO Style Step Sequencer")
 
+# Estado (2)
+step_states = [[tk.IntVar() for _ in range(NUM_STEPS)] for _ in range(NUM_SAMPLES)]
 volume_vars = [tk.DoubleVar(value=1.0) for _ in range(NUM_SAMPLES)]
 
-# Crear botones (checkboxes)
+selected_sample_index = 0
+write_mode = tk.BooleanVar(value=False)
+current_step = 0
+running = False
+
+# === Botón Write ===
+def toggle_write():
+    if write_mode.get():
+        write_mode.set(False)
+        render_pad_view()
+    else:
+        write_mode.set(True)
+        render_sequencer_view()
+
+write_button = tk.Button(root, text="Write", command=toggle_write)
+write_button.grid(row=0, column=0, sticky="w")
+
+# === Rejilla dinámica (pads o secuenciador) ===
+pad_grid = tk.Frame(root)
+pad_grid.grid(row=1, column=0, columnspan=8, rowspan=4, padx=10, pady=10)
+
+def select_sample(index):
+    global selected_sample_index
+    selected_sample_index = index
+    render_pad_view()
+
+def render_pad_view():
+    for widget in pad_grid.winfo_children():
+        widget.destroy()
+
+    for i in range(4):
+        for j in range(4):
+            index = i * 4 + j
+            if index >= NUM_SAMPLES:
+                continue
+            text = f"{index + 1}"
+            bg = "#ff9999" if index == selected_sample_index else "SystemButtonFace"
+            btn = tk.Button(pad_grid, text=text, width=6, height=3,
+                            bg=bg,
+                            command=lambda idx=index: select_sample(idx))
+            btn.grid(row=i, column=j, padx=2, pady=2)
+
+def render_sequencer_view():
+    for widget in pad_grid.winfo_children():
+        widget.destroy()
+
+    for i in range(4):
+        for j in range(4):
+            step = i * 4 + j
+            var = step_states[selected_sample_index][step]
+            cb = tk.Checkbutton(pad_grid, variable=var)
+            cb.grid(row=i, column=j, padx=6, pady=6)
+
+# === Cargar sample ===
 def load_sample(index):
     file_path = filedialog.askopenfilename(filetypes=[("WAV files", "*.wav")])
     if file_path:
@@ -42,58 +94,44 @@ def load_sample(index):
         samples[index].set_volume(volume_vars[index].get())
         sample_labels[index].config(text=os.path.basename(file_path))
 
+# === UI para cargar samples y volumen ===
 for row in range(NUM_SAMPLES):
-    # Botón cargar sample
     btn = tk.Button(root, text="Cargar", command=lambda i=row: load_sample(i))
-    btn.grid(row=row, column=0)
+    btn.grid(row=row + 5, column=0)
 
-    # Nombre del sample
     label = tk.Label(root, text=os.path.basename(sample_paths[row]) if samples[row] else "Ninguno")
-    label.grid(row=row, column=1)
+    label.grid(row=row + 5, column=1)
     sample_labels[row] = label
 
-    # Slider de volumen
     vol = tk.Scale(root, from_=0.0, to=1.0, resolution=0.01, orient="horizontal",
                    variable=volume_vars[row],
                    command=lambda val, i=row: samples[i].set_volume(float(val)) if samples[i] else None)
-    vol.grid(row=row, column=2)
+    vol.grid(row=row + 5, column=2)
 
-    # Checkboxes
-    for col in range(NUM_STEPS):
-        var = tk.IntVar()
-        step_states[row][col] = var
-        cb = tk.Checkbutton(root, variable=var)
-        cb.grid(row=row, column=col + 3)
-
-
-# Indicación visual de paso actual
-step_labels = [tk.Label(root, text=" ") for _ in range(NUM_STEPS)]
-for col, label in enumerate(step_labels):
-    label.grid(row=NUM_SAMPLES, column=col)
-
-# Loop del secuenciador (en un hilo)
+# === Secuenciador ===
 def sequencer_loop():
     global current_step
     next_time = time.perf_counter()
     while running:
-        # Toca los sonidos activos
         for sample_index in range(NUM_SAMPLES):
             if step_states[sample_index][current_step].get() == 1:
                 if samples[sample_index]:
                     samples[sample_index].play()
 
-        # Indicar visualmente el paso
-        for i, label in enumerate(step_labels):
-            label.config(text=">" if i == current_step else " ")
+        # Highlight del paso actual en modo write
+        if write_mode.get():
+            for i in range(4):
+                for j in range(4):
+                    step = i * 4 + j
+                    widget = pad_grid.grid_slaves(row=i, column=j)
+                    if widget:
+                        widget[0].config(bg="lime" if step == current_step else "SystemButtonFace")
 
-        # Espera al próximo paso
         next_time += STEP_TIME
-        sleep_time = max(0, next_time - time.perf_counter())
-        time.sleep(sleep_time)
-
+        time.sleep(max(0, next_time - time.perf_counter()))
         current_step = (current_step + 1) % NUM_STEPS
 
-# Botón Start/Stop
+# === Play/Stop ===
 def toggle_play():
     global running, current_step
     if not running:
@@ -106,8 +144,9 @@ def toggle_play():
         play_button.config(text="Play")
 
 play_button = tk.Button(root, text="Play", command=toggle_play)
-play_button.grid(row=NUM_SAMPLES + 1, column=0, columnspan=4, sticky="w")
+play_button.grid(row=9, column=0, columnspan=4, sticky="w")
 
+# === Teclado ===
 def on_key_press(event):
     key = event.char.lower()
     if key in key_bindings:
@@ -117,6 +156,7 @@ def on_key_press(event):
 
 root.bind("<KeyPress>", on_key_press)
 
+# Inicializar con vista de pads
+render_pad_view()
+
 root.mainloop()
-
-
