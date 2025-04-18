@@ -10,7 +10,6 @@ Se van a imponer muchas restricciones en el flujo de creación y las posibilidad
 
 ## por hacer
 
-- cargar samples desde el pad directamente
 - solo un slider para los volúmenes: cada pad tiene el suyo y lo muestra bajo el nombre del sample (para distintos volúmenes en el secuenciador clonar samples)
 - botón "pattern" para organizar los patrones sobre la rejilla de pads
 - copiar sonidos de un pad a otro y borrar
